@@ -48,7 +48,7 @@ docker logs cloudflared_tunnel
 1. Abre tu navegador y accede a `http://localhost:5678`.
 2. Completa la configuración inicial de n8n.
 3. Ve a **Workflows** -> **Import from File**.
-4. Selecciona el archivo `workflow/workflow-gatekeeper-ai.json` incluido en este repositorio.
+4. Selecciona el archivo `workflow/CI_CD Gatekeeper AI.json` incluido en este repositorio.
 
 ### 5. Configurar Credenciales en n8n
 Dentro de n8n, configura las dos credenciales necesarias:
