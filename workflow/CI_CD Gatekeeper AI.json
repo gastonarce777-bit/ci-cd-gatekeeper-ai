@@ -1,0 +1,462 @@
+{
+  "name": "CI/CD Gatekeeper AI",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-pr-webhook",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "dc6856b4-9fcf-4d8b-bcc2-3c4d3728fa95",
+      "name": "Webhook",
+      "webhookId": "d579e4c1-652a-4c60-af06-2e1795dc7b5e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "68c6f3ce-9b4b-43f5-8cfa-7276ae583e67",
+              "leftValue": "={{ $json.headers['x-github-event'] }}",
+              "rightValue": "pull_request",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        192,
+        0
+      ],
+      "id": "653c46de-0388-48b9-8381-977a67fa1ddf",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.body.repository.full_name }}/pulls/{{ $json.body.number }}/files",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        352,
+        -128
+      ],
+      "id": "ae87bd7b-fec2-4773-8c97-94630d33f4e8",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ROwJyeouLGh3q1Mf",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## FASE 1 - Ingesta y Obtención de Diff",
+        "height": 432,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        -256
+      ],
+      "id": "8da2eeec-e73a-4baa-8949-994d2ae19d19",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agrupa todos los parches (diffs) de los archivos\nconst files = $input.all();\nlet diffContent = \"\";\n\nfiles.forEach(item => {\n  const data = item.json;\n  diffContent += `--- File: ${data.filename} (${data.status}) ---\\n`;\n  diffContent += `${data.patch || \"Sin parche directo de diff\"}\\n\\n`;\n});\n\nconst systemPrompt = `Eres un Senior Software Engineer y experto en Ciberseguridad.\nAnaliza el siguiente 'diff' de un Pull Request.\n\nDebes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura estricta:\n\n{\n\"has_issues\": boolean,\n\"severity\": \"LOW\" | \"MEDIUM\" | \"HIGH\" | \"CRITICAL\",\n\"review_summary\": \"Resumen general del cambio y calidad del código\",\n\"feedback_items\": [\n{\n  \"type\": \"SUGGESTION\" | \"BUG\" | \"SECURITY_VULNERABILITY\",\n  \"file\": \"nombre_del_archivo\",\n  \"issue\": \"Descripción clara del problema o mejora\",\n  \"fix_proposal\": \"Código corregido o propuesta concreta de solución\"\n}\n]\n}\n\nREGLAS ESTRICTAS:\n1. Si encuentras vulnerabilidades graves (SQLi, XSS, secrets/tokens expuestos, etc.) la severidad DEBE ser HIGH o CRITICAL y has_issues DEBE ser true.\n2. Si no hay errores críticos y es un cambio correcto, asigna severity LOW o MEDIUM.\n3. Devuelve ÚNICAMENTE el objeto JSON sin bloques de marcado ni texto antes o después.`;\n\nreturn [\n  {\n    json: {\n      systemPrompt: systemPrompt,\n      userContent: `Por favor analiza este diff:\\n\\n${diffContent}`\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -128
+      ],
+      "id": "cd5cc80f-e213-45c8-9d6a-748898e49bf6",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-5-5",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-5-5"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=={{ $json.userContent }}"
+            }
+          ]
+        },
+        "options": {
+          "system": "=={{ $json.systemPrompt }}",
+          "maxTokens": 8192
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        784,
+        -128
+      ],
+      "id": "95af7710-20cc-4d26-be29-0e6c1f1fab4e",
+      "name": "Message a model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "v2Nb1WA88EkeC25z",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtenemos la respuesta en texto de Claude\nconst rawText = $input.first().json.content[0].text;\n\n// Convertimos el texto JSON a un objeto de JavaScript\nconst reviewData = JSON.parse(rawText);\n\n// Extraemos los datos originales del webhook para saber qué PR estamos evaluando\nconst webhookBody = $('Webhook').first().json.body;\n\nreturn [\n  {\n    json: {\n      repoFullName: webhookBody.repository.full_name,\n      prNumber: webhookBody.number,\n      hasIssues: reviewData.has_issues,\n      severity: reviewData.severity,\n      summary: reviewData.review_summary,\n      feedbackItems: reviewData.feedback_items\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -128
+      ],
+      "id": "b7f57473-344e-4a05-b80e-97e49235af9e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nlet markdown = `## 🤖 AI Code Review & Gatekeeper Report\\n\\n`;\nmarkdown += `**Estado:** ${data.hasIssues ? '⚠️ Se encontraron observaciones' : '✅ Código aprobado'}\\n`;\nmarkdown += `**Severidad:** \\`${data.severity}\\`\\n\\n`;\nmarkdown += `### 📝 Resumen de la revisión\\n${data.summary}\\n\\n`;\n\nif (data.feedbackItems && data.feedbackItems.length > 0) {\n  markdown += `### 🔍 Detalles y Soluciones Propuestas\\n\\n`;\n  data.feedbackItems.forEach((item, index) => {\n    markdown += `#### ${index + 1}. [${item.type}] - \\`${item.file}\\`\\n`;\n    markdown += `**Problema:** ${item.issue}\\n\\n`;\n    markdown += `**Propuesta de solución (Fix):**\\n\\`\\`\\`markdown\\n${item.fix_proposal}\\n\\`\\`\\`\\n\\n`;\n  });\n}\n\n// Generamos los JSON del body ya escapados adecuadamente\nconst bodyApprove = JSON.stringify({\n  event: \"APPROVE\",\n  body: markdown\n});\n\nconst bodyReject = JSON.stringify({\n  event: \"REQUEST_CHANGES\",\n  body: markdown\n});\n\nreturn [\n  {\n    json: {\n      ...data,\n      markdownComment: markdown,\n      jsonBodyApprove: bodyApprove,\n      jsonBodyReject: bodyReject\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        -128
+      ],
+      "id": "dbd8a50e-590a-4d6f-bf68-2807723cfd1b",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "19f773f9-f369-4aed-baf8-742def1d2a78",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "HIGH",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "bb8c5366-ff8c-4cb7-968c-2624d4c4f6bb",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "CRITICAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1392,
+        -128
+      ],
+      "id": "95fcada0-50f7-4fea-b1c3-eba0dce236d2",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $json.repoFullName }}/pulls/{{ $json.prNumber }}/reviews",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "REQUEST_CHANGES"
+            },
+            {
+              "name": "body",
+              "value": "={{ $json.markdownComment }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1616,
+        -240
+      ],
+      "id": "160bfddd-1ff2-4ff6-ada6-ebf13a08b527",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ROwJyeouLGh3q1Mf",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $json.repoFullName }}/pulls/{{ $json.prNumber }}/reviews",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "APPROVE"
+            },
+            {
+              "name": "body",
+              "value": "={{ $json.markdownComment }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1616,
+        -32
+      ],
+      "id": "e0835089-697e-4a55-991b-fb9fdd4607c7",
+      "name": "HTTP Request2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ROwJyeouLGh3q1Mf",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## FASE 2 - Motor de Análisis IA",
+        "height": 432,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        608,
+        -256
+      ],
+      "id": "a2e69cc8-4adb-4bc1-951c-a6761c8ca9ef",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## FASE 3 - Gatekeeper e Inyección en GitHub",
+        "height": 432,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        -256
+      ],
+      "id": "384db853-ca6c-4c6a-9143-208e5cd6abe8",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## CI/CD Gatekeeper AI — Automated PR Review & Security Guard\n**Descripción General** \n\nPipeline DevSecOps que automatiza la revisión de Pull Requests en GitHub en tiempo real mediante IA.\n\nArquitectura en 3 Fases:\n\nFASE 1 (Ingesta & Diff): Recibe el evento via Webhook, filtra acciones de PR (opened/synchronize) y descarga los cambios en formato diff.\n\nFASE 2 (Análisis IA): Inyecta el diff en Claude 3.5 Sonnet (8192 tokens) para detectar vulnerabilidades, bugs y generar sugerencias de código.\n\nFASE 3 (Gatekeeper & Action): Sanitiza la respuesta JSON, formatea a Markdown y ejecuta la decisión en GitHub via API:\n\n🛑 Bloqueo (REQUEST_CHANGES): Si la severidad es HIGH o CRITICAL.\n\n✅ Aprobación (APPROVE): Si el código cumple los estándares de calidad y seguridad.",
+        "height": 496,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        -304
+      ],
+      "id": "3c41e703-0e28-4c29-a173-ad9da9578186",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d764ee9e-48b8-411a-9a7e-11f050f9437e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bf9095d06325bddff43090c52d2cc47c89f64a46e6108d7d774c0e66e23cd8fa"
+  },
+  "id": "tO6Q8JRhohSSkujc",
+  "tags": []
+}
