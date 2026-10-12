@@ -6,7 +6,7 @@ Sistema automatizado de **DevSecOps Gatekeeper** para auditoría y control de ca
 
 ## 📌 Repositorios del Proyecto
 
-* **Repositorio del Gatekeeper & Infraestructura:** `https://github.com/gastonarce777-bit/ci-cd-gatekeeper-ai` *(Este repositorio)*
+* **Repositorio del Gatekeeper & Infraestructura:** [gastonarce777-bit/ci-cd-gatekeeper-ai](https://github.com/gastonarce777-bit/ci-cd-gatekeeper-ai))
 * **Repositorio Target de Pruebas (Mini Ecommerce):** [gastonarce777-bit/mini-ecommerce-storefront](https://github.com/gastonarce777-bit/mini-ecommerce-storefront)
 
 ---
