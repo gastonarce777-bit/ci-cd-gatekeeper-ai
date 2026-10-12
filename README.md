@@ -86,6 +86,17 @@ Dentro de n8n, configura las dos credenciales necesarias:
 2. Abre un **Pull Request** hacia `main`.
 3. **Resultado esperado:** El evaluador de severidad (`If1`) tomará la rama `FALSE` y el bot aprobará el PR con **`APPROVE`**.
 
+## ⚖️ Análisis de Límites y Condiciones Operativas
+
+Un sistema real opera bajo restricciones de negocio, rendimiento y seguridad. A continuación se detalla cómo se balancearon las cuatro condiciones clave del proyecto:
+
+| Condición | Detalle y Balance del Sistema |
+| :--- | :--- |
+| **Costo** | **Operación Altamente Económica:**<br>• **Suscripción Plataforma:** USD $20.00 / mes (Plan de desarrollo Anthropic).<br>• **Consumo API (Inferencia):** USD $0.22 acumulados durante todas las pruebas de desarrollo y validación.<br>• **Optimización de Costos:** Al descargar e inspeccionar únicamente las líneas modificadas (`.diff`) en lugar del repositorio completo, el consumo de tokens de entrada disminuye drásticamente, haciendo la operación viable para entornos enterprise a un costo insignificante por Pull Request. |
+| **Tiempo de Respuesta** | **Ejecución de Alta Eficiencia (7 a 10 segundos):**<br>• El ciclo completo de revisión toma entre **7 y 10 segundos** desde que el desarrollador crea o actualiza un Pull Request en GitHub hasta que el bot publica el feedback e inyecta la resolución (`APPROVE` / `REQUEST_CHANGES`).<br>• **Justificación:** Se logra esta velocidad al evitar el `git clone` del repositorio y procesar directamente el parche de cambios vía API HTTP REST. Este tiempo resulta imperceptible dentro del pipeline de CI/CD sin bloquear el flujo de trabajo de los desarrolladores. |
+| **Privacidad** | **Protección e Aislamiento del Código Sensible:**<br>• **Procesamiento de Diff Mínimo:** Solo las líneas modificadas viajan encriptadas vía HTTPS (TLS 1.3) a través de la API oficial de Anthropic.<br>• **Política de Datos de Anthropic:** El uso de la API Comercial garantiza que Anthropic **no utiliza ni almacena los datos o el código procesado para entrenamiento** de futuros modelos.<br>• **Infraestructura Self-Hosted:** El orquestador de n8n opera dentro de un contenedor Docker local en red privada aislada (`n8n_net`), exponiendo únicamente el Webhook necesario mediante Cloudflare Tunnel. |
+| **Operabilidad** | **Facilidad de Réplica y Despliegue Automatizado:**<br>• **Infraestructura como Código (IaC):** La solución incluye un archivo `docker-compose.yml` que orquesta n8n y Cloudflare Tunnel con un solo comando (`docker-compose up -d`).<br>• **Importación Simplificada:** El workflow de n8n se entrega exportado como un único archivo JSON (`workflow-gatekeeper-ai.json`).<br>• **Documentación Completa:** La guía paso a paso del `README.md` y el Documento de Diseño Técnico (DDT v1.0) permiten que cualquier ingeniero de DevOps pueda replicar y levantar la solución en pocos minutos. |
+
 ---
 
 ## 📄 Documentación Técnica
